@@ -110,3 +110,35 @@ The `ZKProof` class is the central component of `NoKnow` and its state (defined 
 
 ## Example Usage
 TODO: Include example usage
+
+#### Example 1
+    """
+    Extremely simple example of NoKnow ZK Proof implementation
+    """
+
+    from noknow import ZKProof
+    from getpass import getpass
+
+
+    def main():
+        # the state of `zk` should be known to both Prover (Client) and Verifier (Server)
+        zk = ZKProof.new()
+        # `signature` is sent to Server along with `zk.params` for persistent storage
+        signature = zk.create_signature(getpass("Create Password: "))
+
+        while True:
+            # Server generates random token and sends to Client
+            token = ZKProof.random_token()
+
+            # Client generates a challenge with the token and submits to Server
+            challenge = zk.create_challenge(getpass("Enter Password: "), token)
+
+            # Server proves the challenge with the shared token, user-submitted challenge, and stored signature
+            if zk.prove_challenge(challenge, signature, token):
+                print("Authentication Successful!\n")
+                break
+            else:
+                print("Authentication Failed!\n")
+
+    if __name__ == "__main__":
+        main()
