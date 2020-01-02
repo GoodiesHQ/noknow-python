@@ -112,6 +112,7 @@ The `ZKProof` class is the central component of `NoKnow` and its state (defined 
 TODO: Include example usage
 
 #### Example 1
+    #!/usr/bin/env python3
     """
     Extremely simple example of NoKnow ZK Proof implementation
     """
