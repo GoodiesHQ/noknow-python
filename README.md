@@ -8,7 +8,7 @@
 </div>
 <div align="center">
   <sub>
-    Built with ❤︎ by <a href="https://twitter.com/VirtualArcher">Austin Archer</a> :)
+    Built with ❤︎ by <a href="https://www.linkedin.com/in/austinarcher/">Austin Archer</a> :)
   </sub>
 </div>
 <br />
