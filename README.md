@@ -24,7 +24,7 @@
 
 
 ## Credits
-I am far from a methematician and did not design the protocol myself. The proofs used are rather complex in nature. I will do my best to explain its functionality, but please refer to the research papers on which this implementation is based as it does a far more complete job with explanation than I. **Note:** the paper's implementation uses the set of all real numbers as the cyclic group for simplicity. In this implementation, the cyclic group used is an elliptic curve.
+I am far from a mathematician and did not design the protocol myself. The proofs used are rather complex in nature. I will do my best to explain its functionality, but please refer to the research papers on which this implementation is based as it does a far more complete job with explanation than I. **Note:** the paper's implementation uses the set of all real numbers as the cyclic group for simplicity. In this implementation, the cyclic group used is an elliptic curve.
 
 [Implementing Zero-Knowledge Authentication with Zero Knowledge](https://ojs.pythonpapers.org/index.php/tppm/article/view/155) by Brandon Lum Jia Jun
 
