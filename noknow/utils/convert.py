@@ -3,11 +3,10 @@ Methods used for conversion
 """
 
 from typing import Union
-from ecpy.curves import Point, Curve
 
 
 __all__ = [
-    "to_bytes", "to_str", "bytes_to_int", "int_to_bytes", "point_to_int",
+    "to_bytes", "to_str", "bytes_to_int", "int_to_bytes",
 ]
 
 
@@ -19,19 +18,13 @@ def int_to_bytes(value: int) -> bytearray:
     return bytearray(value.to_bytes((value.bit_length() + 7) // 8, byteorder="big"))
 
 
-def point_to_int(point: Point) -> int:
-    return bytes_to_int(point.curve.encode_point(point))
-
-
-def int_to_point(value: int, curve: Curve) -> Point:
-    return curve.decode_point(int_to_bytes(value))
-
-
 def to_bytes(data, encoding="utf-8", errors="replace") -> bytes:
     if isinstance(data, (bytes, bytearray)):
         return data
     if isinstance(data, str):
         return data.encode(encoding=encoding, errors=errors)
+    if isinstance(data, int):
+        return int_to_bytes(data)
     return bytes(data)
 
 
