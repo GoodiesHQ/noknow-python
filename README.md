@@ -20,6 +20,7 @@
 - [Purpose](#purpose)
 - [How it Works](#how-it-works)
 - [API](#api)
+- [Install](#install)
 - [Example Usage](#example-usage)
 
 
@@ -107,6 +108,11 @@ The `ZKProof` class is the central component of `NoKnow` and its state (defined 
   </tr>
 </table>
 
+## Install
+
+`NoKnow` is available from PyPi! Simply run:
+
+    pip install -U noknow
 
 ## Example Usage
 TODO: Include example usage
