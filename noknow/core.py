@@ -1,16 +1,18 @@
 """
 noknow/core.py: Provides the interface for using Zero-Knowledge Proofs within applications
 """
+from base64 import b64encode, b64decode
 from noknow.utils import convert, crypto
 from random import SystemRandom
 from typing import Union, NamedTuple
+import json
 
 
 random = SystemRandom()
 
 
 __all__ = [
-    "ZKParameters", "ZKSignature", "ZKChallenge", "ZKProof",
+    "ZKParameters", "ZKSignature", "ZKChallenge", "ZKProof", "ZK",
 ]
 
 
@@ -32,9 +34,20 @@ class ZKSignature(NamedTuple):
     signature: the calculated signature derived from the ZK curve and user secret
     """
     params: ZKParameters
-    signature: int      # calculate signature:
-    # h = Hash(secret | salt)
-    # signature = (g^h mod d)
+    data: str
+    signature: int
+
+
+class ZKData(NamedTuple):
+    params: ZKParameters
+    data: str
+    c: int
+    z: int
+
+
+class ZKProof(NamedTuple):
+    params: ZKParameters
+    proof: int
 
 
 class ZKChallenge(NamedTuple):
@@ -52,7 +65,7 @@ class ZKChallenge(NamedTuple):
     z: int
 
 
-class ZKProof:
+class ZK:
     def __init__(self, params: ZKParameters):
         """
         Initialize the ZKProof
@@ -79,11 +92,15 @@ class ZKProof:
         return random.getrandbits(self.bits)
 
     @staticmethod
+    def load(parameters):
+        return ZK(ZKParameters.load(parameters))
+
+    @staticmethod
     def new(bits: int = 256, hash_alg: str = "sha256", prime_confidence: int = 10):
         """
         Create a new ZKProof using the elliptic curve `curve` and a `bits`-sized scalar
         """
-        return ZKProof(
+        return ZK(
             ZKParameters(
                 d=crypto.get_prime(bits, confidence=prime_confidence),  # Large prime modulo
                 g=random.getrandbits(bits),                             # Random large base number
@@ -92,22 +109,46 @@ class ZKProof:
             )
         )
 
-    def create_signature(self, secret: Union[bytes, str, bytearray]):
-        signature = pow(self.params.g, self.hash(secret), self.params.d)
-        return ZKSignature(params=self.params, signature=signature)
+    def create_proof(self, secret: Union[bytes, str, bytearray]):
+        proof = pow(self.params.g, self.hash(secret), self.params.d)
+        return ZKProof(params=self.params, proof=proof)
+
+    def create_signature(self, data: str, secret: Union[bytes, str, bytearray]):
+        signature = pow(self.params.g, self.hash(secret, data), self.params.d)
+        return ZKSignature(params=self.params, data=data, signature=signature)
+
+    def sign(self, data, signature: ZKSignature, secret: Union[bytes, str, bytearray]):
+        if signature.signature != pow(self.params.g, self.hash(secret, signature.data), self.params.d):
+            raise Exception("Invalid Password")
+        if signature.params != self.params:
+            raise ValueError("The signature parameters must match the ZK state")
+        c, z = self._prove(secret, hashed_args=(signature.data,), args=(data, signature.data))
+        return ZKData(params=self.params, data=data, c=c, z=z)
+
+    @staticmethod
+    def verify(data: ZKData, signature: ZKSignature):
+        if data.params != signature.params:
+            raise ValueError("The signature and data parameters do not match")
+        zk = ZK(data.params)
+        t = pow(signature.signature, data.c, zk.params.d) \
+             * pow(zk.params.g, data.z, zk.params.d) % zk.params.d
+        return data.c == zk.hash(signature.signature, t, data.data, signature.data)
+
+    def _prove(self, secret: Union[bytes, str, bytearray], hashed_args=(), args=()):
+        h: int = self.hash(secret, *hashed_args)
+        y: int = pow(self.params.g, h, self.params.d)
+        r: int = random.getrandbits(self.bits*2) | 1 << (self.bits * 2)
+        t: int = pow(self.params.g, r, self.params.d)
+        c: int = self.hash(y, t, *args)
+        z: int = r - (c * h)
+        return c, z
 
     def create_challenge(self, secret: Union[bytes, str, bytearray], token: int):
-        h: int = self.hash(secret)                                          # Salted password hash value
-        y: int = pow(self.params.g, h, self.params.d)                       # Calculate signature `Y`
-        r: int = random.getrandbits(self.bits * 2) | 1 << (self.bits * 2)   # Random large number
-        t: int = pow(self.params.g, r, self.params.d)                       # Calculate g^r mod d
-        c: int = self.hash(b''.join(map(convert.int_to_bytes, (y, t, token))))
-        z: int = (r - (h * c))                                              # offset from r, negative numbers OK
+        c, z = self._prove(secret, args=(token,))
         return ZKChallenge(params=self.params, token=token, c=c, z=z)
 
-    def prove_challenge(self, challenge: ZKChallenge, signature: ZKSignature, token: int):
-        t = pow(signature.signature, challenge.c, self.params.d) \
+    def prove_challenge(self, challenge: ZKChallenge, proof: ZKProof, token: int):
+        t = pow(proof.proof, challenge.c, self.params.d) \
             * pow(self.params.g, challenge.z, self.params.d) % self.params.d
-        payload = b''.join(map(convert.int_to_bytes, (signature.signature, t, token)))
+        payload = b''.join(map(convert.to_bytes, (proof.proof, t, token)))
         return challenge.token == token and challenge.c == self.hash(payload)
-
