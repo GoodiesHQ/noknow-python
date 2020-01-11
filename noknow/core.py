@@ -14,7 +14,7 @@ random = SystemRandom()
 
 
 __all__ = [
-    "ZKParameters", "ZKProof", "ZK",
+    "ZKParameters", "ZKSignature", "ZKProof", "ZKData", "ZK",
 ]
 
 
@@ -51,6 +51,10 @@ class ZKSignature(NamedTuple):
 
 
 class ZKProof(NamedTuple):
+    """
+    Cryptographic proof that can be verified to ensure the private key used to create
+    the proof is the same key used to generate the signature
+    """
     params: ZKParameters        # Reference ZK Parameters
     c: int                      # The hash of the signed data and random point, R
     m: int                      # The offset from the secret `r` (`R=r*g`) from c * Hash(secret)
@@ -64,6 +68,9 @@ class ZKProof(NamedTuple):
 
 
 class ZKData(NamedTuple):
+    """
+    Wrapper to contain data and a signed proof using the data
+    """
     data: Union[str, bytes, int]
     proof: ZKProof
 
@@ -77,6 +84,9 @@ class ZKData(NamedTuple):
 
 
 class ZK:
+    """
+    Implementation of Schnorr's protocol to create and validate proofs
+    """
     def __init__(self, parameters: ZKParameters):
         """
         Initialize the curve with the given parameters
@@ -117,9 +127,7 @@ class ZK:
         curve = Curve.get_curve(curve_name)
         if curve is None:
             raise ValueError("Invalid Curve")
-        if bits is None:
-            bits = curve.field.bit_length()
-        return ZK(ZKParameters(alg=hash_alg, curve=curve_name, s=random.getrandbits(bits or cu)))
+        return ZK(ZKParameters(alg=hash_alg, curve=curve_name, s=random.getrandbits(bits or curve.field.bit_length())))
 
     def _to_point(self, value: Union[int, bytes, ZKSignature]):
         return self.curve.decode_point(to_bytes(value.signature if isinstance(value, ZKSignature) else value))
