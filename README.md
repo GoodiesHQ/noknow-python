@@ -96,9 +96,9 @@ The `ZK` class is the central component of `NoKnow` and its state (defined by `Z
 #### instance methods
 <table>
   <tr>
-    <th width="10%">Method</th>
-    <th width="40%">Parameters</th>
-    <th width="15%">Role</th>
+    <th width="9%">Method</th>
+    <th width="46%">Parameters</th>
+    <th width="10%">Role</th>
     <th width="35%">Purpose</th>
   </tr>
   <tr>
