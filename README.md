@@ -25,9 +25,10 @@
 
 
 ## Credits
-I am far from a mathematician and did not design the protocol myself. The proofs used are rather complex in nature. I will do my best to explain its functionality, but please refer to the research papers on which this implementation is based as it does a far more complete job with explanation than I. **Note:** the paper's implementation uses the set of all real numbers as the cyclic group for simplicity. In this implementation, the cyclic group used is an elliptic curve.
+This is a slightly modified implementation of Schnorr's protocol that utilizes a state seed. The proofs used are rather complex in nature, but I will do my best to explain its functionality, but please refer to the research papers on which this implementation is based as it does a far more complete job with explanation than I.
 
-[Implementing Zero-Knowledge Authentication with Zero Knowledge](https://ojs.pythonpapers.org/index.php/tppm/article/view/155) by Brandon Lum Jia Jun
+[Elliptic Curve Based Zero Knowledge Proofs and Their
+Applicability on Resource Constrained Devices](https://arxiv.org/pdf/1107.1626.pdf) by Ioannis Chatzigiannakis, Apostolos Pyrgelis, Paul G. Spirakis, and Yannis C. Stamatiou
 
 
 ## Purpose
@@ -44,49 +45,61 @@ The `noknow` Python API is meant to be simple and intuitive:
 ### Core Components
 
 #### noknow.core.ZKParameters:
-The parameters used to initialize the Elliptic Curve within the Zero-Knowledge crypto system.
+The parameters used to initialize the Zero-Knowledge crypto system.
 
     class ZKParameters(NamedTuple):
         """
-        The parameters required for creating the Zero-Knowledge Cryptosystem
+        Parameters used to construct a ZK proof state using an curve and a random salt
         """
-        curve: str          # the name of the standardized elliptic curve to use for cyclic group point generation
-        d: int              # the large prime number used to generate an elliptic curve point and as a modulo
-        
+        alg: str                    # Hashing algorithm name
+        curve: str                  # Standard Elliptic Curve name to use
+        s: int                      # Random salt for the state
+
 #### noknow.core.ZKSignature:
-A cryptographic public signature created from an Elliptic Curve and a user-provided secret (ex: a password) which should be stored by the server (along with the `ZKParameters` used) and can be used to validate future challenges.
+A crytographic, zero-knowledge signature that can be used to verify future messages.
 
     class ZKSignature(NamedTuple):
         """
-        A cryptographic signature distinct from a hash that can be used to validate the same input in the future
+        Cryptographic public signature used to verify future messages
         """
-        params: ZKParameters  # the reference ZK parameters
-        signature: int        # the calculated signature derived from the ZK curve and user secret
+        params: ZKParameters        # Reference ZK Parameters
+        signature: int              # The public key derived from your original secret
 
 
-#### noknow.core.ZKChallenge:
+#### noknow.core.ZKProof:
+A cryptograpgic proof that can be verified against a signature.
 
-    class ZKChallenge(NamedTuple):
+    class ZKProof(NamedTuple):
         """
-        A cryptographic challenge created by a user based on the signature (derived from the password) 
+        Non-deterministic cryptographic zero-knowledge proof that can be verified to ensure the
+        private key used to create the proof is the same key used to generate the signature
         """
-        params: ZKParameters  # the reference ZK parameters
-        token: int            # the server-provided random tokens
-        c: int                # the hash derived from the signature, a random point, and the random token
-        z: int                # a value derived from the random point and password hash
-        
-        
-### Proof
+        params: ZKParameters        # Reference ZK Parameters
+        c: int                      # The hash of the signed data and random point, R
+        m: int                      # The offset from the secret `r` (`R=r*g`) from c * Hash(secret)
+
+
+#### noknow.core.ZKData
+Wrapper that contains a proof and the necessary data to validate the proof against a signature.
+
+    class ZKData(NamedTuple):
+        """
+        Wrapper to contain data and a signed proof using the data
+        """
+        data: Union[str, bytes, int]
+        proof: ZKProof
+
+### ZK
  
-The `ZKProof` class is the central component of `NoKnow` and its state (defined by `ZKParameters`) should be inherently known to both the Client (Prover) and Server (Verifier).
+The `ZK` class is the central component of `NoKnow` and its state (defined by `ZKParameters`) should be inherently known to both the Client (Prover) and Server (Verifier).
 
 #### instance methods
 <table>
   <tr>
-    <th>Method</th>
-    <th><img width=600 />Parameters</th>
-    <th>Role</th>
-    <th>Purpose</th>
+    <th width="10%">Method</th>
+    <th width="40%">Parameters</th>
+    <th width="15%">Role</th>
+    <th width="35%">Purpose</th>
   </tr>
   <tr>
     <td><code>create_signature</code></td>
@@ -95,14 +108,14 @@ The `ZKProof` class is the central component of `NoKnow` and its state (defined 
     <td>Create a cryptographic signature derived from the value <code>secret</code> to be generated during initial registration and stored for subsequent challenge proofs</td>
   </tr>
   <tr>
-    <td><code>create_challenge</code></td>
-    <td><code>secret: Union[str, bytes]</code> <br /> <code>token: int</code></td>
+    <td><code>sign</code></td>
+    <td><code>secret: Union[str, bytes]</code> <br /> <code>data: Union[str, bytes, int]</code></td>
     <td>Prover</td>
-    <td>Create a ZK challenge with the <code>secret</code> a given randomly generated <code>token</code> provided by the server</td>
+    <td>Create a <code>ZKData</code> object using the <code>secret</code> and any additional data
   </tr>
   <tr>
-    <td><code>prove_challenge</code></td>
-    <td><code>challenge: ZKChallenge</code> <br /> <code>signature: ZKSignature</code> <br /> <code>token: int</code></td>
+    <td><code>verify</code></td>
+    <td><code>challenge: Union[ZKData, ZKProof]</code> <br /> <code>signature: ZKSignature</code> <br /> <code>data: Optional[Union[str, bytes, int]]</code></td>
     <td>Verifier</td>
     <td>Verify the user-provided <code>challenge</code> against the stored <code>signature</code> and randomly generated <code>token</code> to verify the validity of the challenge</td>
   </tr>
@@ -118,34 +131,69 @@ The `ZKProof` class is the central component of `NoKnow` and its state (defined 
 TODO: Include example usage
 
 #### Example 1
-    #!/usr/bin/env python3
+
     """
     Extremely simple example of NoKnow ZK Proof implementation
     """
-
-    from noknow import ZKProof
     from getpass import getpass
+    from noknow.core import ZK, ZKSignature, ZKParameters, ZKData, ZKProof
+    from queue import Queue
+    from threading import Thread
+
+
+    def client(queue: Queue):
+        client_password = "SecretClientPassword"
+        client_zk = ZK.new(curve_name="secp256k1", hash_alg="sha3_256")
+
+        # Create signature and send to server
+        signature = client_zk.create_signature(getpass("Enter Password: "))
+        queue.put(signature.dump())
+
+        # Receive the token from the server
+        token = queue.get()
+
+        # Create a proof that signs the provided token and sends to server
+        proof = client_zk.sign(getpass("Enter Password Again: "), token).dump()
+
+        # Send the token and proof to the server
+        queue.put((token, proof))
+
+        # Wait for server response!
+        print("Success!" if queue.get() else "Failure!")
+
+
+    def server(queue: Queue):
+        # Set up server component
+        server_password = "SecretServerPassword"
+        server_zk = ZK.new(curve_name="secp384r1", hash_alg="sha3_512")
+        server_signature: ZKSignature = server_zk.create_signature("SecureServerPassword")
+
+        # Load the received signature from the Client
+        client_signature = ZKSignature.load(queue.get())
+        client_zk = ZK(client_signature.params)
+
+        # Create a signed token and send to the client
+        queue.put(server_zk.sign("SecureServerPassword", client_zk.token()).dump(separator=":"))
+
+        # Get the token from the client
+        token, proof = queue.get()
+        
+        # In this example, the server signs the token so it can be sure it has not been modified
+        if not server_zk.verify(ZKData.load(token, ":"), server_signature):
+            queue.put(False)
+        else:
+            queue.put(client_zk.verify(ZKProof.load(proof), client_signature))
 
 
     def main():
-        # the state of `zk` should be known to both Prover (Client) and Verifier (Server)
-        zk = ZKProof.new()
-        # `signature` is sent to Server along with `zk.params` for persistent storage
-        signature = zk.create_signature(getpass("Create Password: "))
-
-        while True:
-            # Server generates random token and sends to Client
-            token = ZKProof.random_token()
-
-            # Client generates a challenge with the token and submits to Server
-            challenge = zk.create_challenge(getpass("Enter Password: "), token)
-
-            # Server proves the challenge with the shared token, user-submitted challenge, and stored signature
-            if zk.prove_challenge(challenge, signature, token):
-                print("Authentication Successful!\n")
-                break
-            else:
-                print("Authentication Failed!\n")
+        q = Queue()
+        threads = [
+            Thread(target=client, args=(q,)),
+            Thread(target=server, args=(q,)),
+        ]
+        for func in [Thread.start, Thread.join]:
+            for thread in threads:
+                func(thread)
 
     if __name__ == "__main__":
         main()
