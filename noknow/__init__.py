@@ -1,8 +1,7 @@
 from noknow import utils
-from noknow.core import (
-    ZKParameters, ZKSignature, ZKChallenge, ZKProof, ZK
-)
+from noknow.core import ZKProof, ZKSignature, ZK
+
 
 __all__ = [
-    "utils", "ZKParameters", "ZKSignature", "ZKChallenge", "ZKProof", "ZK",
+    "utils", "ZKSignature", "ZKProof", "ZK",
 ]

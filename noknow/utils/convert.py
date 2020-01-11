@@ -2,6 +2,7 @@
 Methods used for conversion
 """
 
+from ecpy.curves import Curve, Point
 from typing import Union
 
 
@@ -10,8 +11,8 @@ __all__ = [
 ]
 
 
-def bytes_to_int(value: Union[bytes, bytearray]) -> int:
-    return int.from_bytes(bytearray(value), byteorder="big")
+def bytes_to_int(value: Union[bytes, bytearray, Point]) -> int:
+    return int.from_bytes(to_bytes(value), byteorder="big")
 
 
 def int_to_bytes(value: int) -> bytearray:
@@ -25,6 +26,9 @@ def to_bytes(data, encoding="utf-8", errors="replace") -> bytes:
         return data.encode(encoding=encoding, errors=errors)
     if isinstance(data, int):
         return int_to_bytes(data)
+    if isinstance(data, Point):
+        c = data.curve
+        return bytes(c.encode_point(data))
     print("UNTYPED:", type(data), "\n", data)
     return bytes(data)
 

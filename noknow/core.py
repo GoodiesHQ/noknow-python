@@ -1,154 +1,156 @@
 """
 noknow/core.py: Provides the interface for using Zero-Knowledge Proofs within applications
 """
-from base64 import b64encode, b64decode
-from noknow.utils import convert, crypto
-from random import SystemRandom
-from typing import Union, NamedTuple
-import json
 
+from base64 import b64encode, b64decode
+from ecpy.curves import Curve, Point
+from noknow.utils.convert import to_bytes, to_str, bytes_to_int, unpack
+from noknow.utils.crypto import hash_numeric
+from random import SystemRandom
+from typing import NamedTuple, Union
+import json
 
 random = SystemRandom()
 
 
 __all__ = [
-    "ZKParameters", "ZKSignature", "ZKChallenge", "ZKProof", "ZK",
+    "ZKParameters", "ZKProof", "ZK",
 ]
+
+
+def _dump(obj):
+    return to_str(b64encode(to_bytes(json.dumps(unpack(obj), separators=(",", ":")))))
 
 
 class ZKParameters(NamedTuple):
     """
-    The parameters required for creating the Zero-Knowledge Cryptosystem
+    Parameters used to construct a Weierstrass curve in addition to a random salt
     """
-    alg: str    # the hash algorithm to use
-    d: int      # large prime modulo to use for calculating the signature
-    g: int      # large number N to use as a base number
-    s: int      # random salt used during password hashing
+    alg: str                    # Hashing algorithm name
+    curve: str                  # Standard Elliptic Curve name to use
+    s: int                      # Random salt for the state
+
+    @staticmethod
+    def load(data):
+        return ZKParameters(**json.loads(to_str(b64decode(to_bytes(data)))))
+    dump = _dump
 
 
 class ZKSignature(NamedTuple):
     """
-    A cryptographic signature distinct from a hash that can be used to validate the same input in the future:
-
-    params: the reference ZK parameters
-    signature: the calculated signature derived from the ZK curve and user secret
+    Cryptographic public signature used to verify future messages
     """
-    params: ZKParameters
-    data: str
-    signature: int
+    params: ZKParameters        # Reference ZK Parameters
+    signature: int              # The public key derived from your original secret
 
-
-class ZKData(NamedTuple):
-    params: ZKParameters
-    data: str
-    c: int
-    z: int
+    @staticmethod
+    def load(data):
+        info = json.loads(to_str(b64decode(to_bytes(data))))
+        return ZKSignature(params=ZKParameters(**info.pop("params")), **info)
+    dump = _dump
 
 
 class ZKProof(NamedTuple):
-    params: ZKParameters
-    proof: int
+    params: ZKParameters        # Reference ZK Parameters
+    c: int                      # The hash of the signed data and random point, R
+    m: int                      # The offset from the secret `r` (`R=r*g`) from c * Hash(secret)
+
+    @staticmethod
+    def load(data):
+        info = json.loads(to_str(b64decode(to_bytes(data))))
+        return ZKProof(params=ZKParameters(**info.pop("params")), **info)
+
+    dump = _dump
 
 
-class ZKChallenge(NamedTuple):
-    """
-    A cryptographic challenge created by a user based on the signature (derived from the password)
+class ZKData(NamedTuple):
+    data: Union[str, bytes, int]
+    proof: ZKProof
 
-    params: the reference ZK parameters
-    token: the server-provided random tokens
-    c: the hash derived from the signature, a random point, and the random token
-    z: a value derived from the random point and password hash
-    """
-    params: ZKParameters
-    token: int
-    c: int
-    z: int
+    @staticmethod
+    def load(data, separator="\n"):
+        data, proof = data.rsplit(separator, 1)
+        return ZKData(data=data, proof=ZKProof.load(proof))
+
+    def dump(self, separator="\n"):
+        return separator.join(map(to_str, [self.data, self.proof.dump()]))
 
 
 class ZK:
-    def __init__(self, params: ZKParameters):
+    def __init__(self, parameters: ZKParameters):
         """
-        Initialize the ZKProof
+        Initialize the curve with the given parameters
         """
-        self._bits = (8 * round(params.d.bit_length() / 8))
+        self._curve = Curve.get_curve(parameters.curve)
+        if not self._curve:
+            raise ValueError("The curve '{}' is invalid".format(parameters.curve))
+        self._params = parameters
+        self._bits = self._curve.field.bit_length()
         self._mask = (1 << self._bits) - 1
-        self._params = params
 
     @property
-    def bits(self) -> int:
-        return self._bits
-
-    def hash(self, *values):
-        return crypto.hash_numeric(*values, self.params.s, alg=self.params.alg) & self._mask
-
-    @property
-    def params(self) -> ZKParameters:
+    def params(self):
         return self._params
 
-    def random_token(self):
-        """
-        Generate a random token of `bits` random bits
-        """
+    @property
+    def bits(self):
+        return self._bits
+
+    @property
+    def mask(self):
+        return self._mask
+
+    @property
+    def salt(self):
+        return self._params.s
+
+    @salt.setter
+    def salt(self, value):
+        self._params.s = value
+
+    @property
+    def curve(self):
+        return self._curve
+
+    @staticmethod
+    def new(curve_name: str = "secp256k1", hash_alg: str = "sha256", bits: int =  None):
+        curve = Curve.get_curve(curve_name)
+        if curve is None:
+            raise ValueError("Invalid Curve")
+        if bits is None:
+            bits = curve.field.bit_length()
+        return ZK(ZKParameters(alg=hash_alg, curve=curve_name, s=random.getrandbits(bits or cu)))
+
+    def _to_point(self, value: Union[int, bytes, ZKSignature]):
+        return self.curve.decode_point(to_bytes(value.signature if isinstance(value, ZKSignature) else value))
+
+    def token(self) -> int:
         return random.getrandbits(self.bits)
 
-    @staticmethod
-    def load(parameters):
-        return ZK(ZKParameters.load(parameters))
+    def hash(self, *values):
+        return hash_numeric(*[v for v in values if v is not None], self.salt, alg=self.params.alg) & self._mask
 
-    @staticmethod
-    def new(bits: int = 256, hash_alg: str = "sha256", prime_confidence: int = 10):
-        """
-        Create a new ZKProof using the elliptic curve `curve` and a `bits`-sized scalar
-        """
-        return ZK(
-            ZKParameters(
-                d=crypto.get_prime(bits, confidence=prime_confidence),  # Large prime modulo
-                g=random.getrandbits(bits),                             # Random large base number
-                s=random.getrandbits(bits),                             # Random salt value
-                alg=hash_alg,                                           # Hash algorithm
-            )
+    def create_signature(self, secret: Union[str, bytes]) -> ZKSignature:
+        return ZKSignature(
+            params=self.params,
+            signature=bytes_to_int(self.hash(secret) * self.curve.generator),
         )
 
-    def create_proof(self, secret: Union[bytes, str, bytearray]):
-        proof = pow(self.params.g, self.hash(secret), self.params.d)
-        return ZKProof(params=self.params, proof=proof)
+    def create_proof(self, secret: Union[str, bytes], data: Union[int, str, bytes]=None) -> ZKProof:
+        key = self.hash(secret)                 # Create private signing key
+        r = random.getrandbits(self.bits)       # Generate random bits
+        R = r * self.curve.generator            # Random point whose discrete log, `r`, is know
+        c = self.hash(data, R)                  # Hash the data and random point
+        m = r + c * (key % self.curve.field)    # Send offset between discrete log of R from c*x
+        return ZKProof(params=self.params, c=c, m=m)
 
-    def create_signature(self, data: str, secret: Union[bytes, str, bytearray]):
-        signature = pow(self.params.g, self.hash(secret, data), self.params.d)
-        return ZKSignature(params=self.params, data=data, signature=signature)
+    def sign(self, secret: Union[str, bytes], data: Union[int, str, bytes]) -> ZKData:
+        return ZKData(
+            data=data,
+            proof=self.create_proof(secret, data),
+        )
 
-    def sign(self, data, signature: ZKSignature, secret: Union[bytes, str, bytearray]):
-        if signature.signature != pow(self.params.g, self.hash(secret, signature.data), self.params.d):
-            raise Exception("Invalid Password")
-        if signature.params != self.params:
-            raise ValueError("The signature parameters must match the ZK state")
-        c, z = self._prove(secret, hashed_args=(signature.data,), args=(data, signature.data))
-        return ZKData(params=self.params, data=data, c=c, z=z)
-
-    @staticmethod
-    def verify(data: ZKData, signature: ZKSignature):
-        if data.params != signature.params:
-            raise ValueError("The signature and data parameters do not match")
-        zk = ZK(data.params)
-        t = pow(signature.signature, data.c, zk.params.d) \
-             * pow(zk.params.g, data.z, zk.params.d) % zk.params.d
-        return data.c == zk.hash(signature.signature, t, data.data, signature.data)
-
-    def _prove(self, secret: Union[bytes, str, bytearray], hashed_args=(), args=()):
-        h: int = self.hash(secret, *hashed_args)
-        y: int = pow(self.params.g, h, self.params.d)
-        r: int = random.getrandbits(self.bits*2) | 1 << (self.bits * 2)
-        t: int = pow(self.params.g, r, self.params.d)
-        c: int = self.hash(y, t, *args)
-        z: int = r - (c * h)
-        return c, z
-
-    def create_challenge(self, secret: Union[bytes, str, bytearray], token: int):
-        c, z = self._prove(secret, args=(token,))
-        return ZKChallenge(params=self.params, token=token, c=c, z=z)
-
-    def prove_challenge(self, challenge: ZKChallenge, proof: ZKProof, token: int):
-        t = pow(proof.proof, challenge.c, self.params.d) \
-            * pow(self.params.g, challenge.z, self.params.d) % self.params.d
-        payload = b''.join(map(convert.to_bytes, (proof.proof, t, token)))
-        return challenge.token == token and challenge.c == self.hash(payload)
+    def verify(self, challenge: Union[ZKData, ZKProof], signature: ZKSignature, data: Union[str, bytes, int]=""):
+        data, proof = (data, challenge) if isinstance(challenge, ZKProof) else (challenge.data, challenge.proof)
+        c, m = proof.c, proof.m
+        return c == self.hash(data, (m * self.curve.generator) - (self._to_point(signature) * c))

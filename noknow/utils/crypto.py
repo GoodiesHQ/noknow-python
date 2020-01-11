@@ -1,3 +1,5 @@
+from ecpy.curves import Curve
+from ecpy.curves import Point
 from noknow.utils import convert
 from typing import Union, Generator
 import hashlib
@@ -14,7 +16,7 @@ _HASH_TYPES = {
 }
 
 
-def hash_numeric(*values: Union[str, bytes, bytearray, int], alg="sha3_256") -> int:
+def hash_numeric(*values: Union[str, bytes, bytearray, int, Point], alg="sha3_256") -> int:
     """
     Compute the cryptographic hash of the provided values and return the digest in integer form
     """
@@ -62,7 +64,7 @@ def is_prime(num: int, confidence: int):
     return all(miller_rabin(d, num) for _ in range(confidence))
 
 
-def prime_gen(bits: int, confidence: int = 15) -> Generator:
+def prime_gen(bits: int, confidence: int, safe: bool = False) -> Generator:
     """
     Create a generator of random prime numbers of size `bits` and begin generating prime numbers
     """
@@ -71,12 +73,13 @@ def prime_gen(bits: int, confidence: int = 15) -> Generator:
         # while not gmpy2.is_bpsw_prp(n):
         while not is_prime(n, confidence):
             n += 2  # next odd number
-        yield n
+        if not safe or is_prime((n - 1) >> 1, confidence):
+            yield n
 
 
-def get_prime(bits: int=256, confidence: int = 15) -> int:
+def get_prime(bits: int=256, confidence: int = 15, safe: bool = False) -> int:
     """
     Generate a single prime number of size `bits`
     """
-    return next(prime_gen(bits, confidence))
+    return next(prime_gen(bits, confidence, safe=safe))
 
