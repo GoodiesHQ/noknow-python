@@ -24,7 +24,7 @@ def _dump(obj):
 
 class ZKParameters(NamedTuple):
     """
-    Parameters used to construct a Weierstrass curve in addition to a random salt
+    Parameters used to construct a ZK proof state using an curve and a random salt
     """
     alg: str                    # Hashing algorithm name
     curve: str                  # Standard Elliptic Curve name to use
@@ -71,7 +71,7 @@ class ZKData(NamedTuple):
     """
     Wrapper to contain data and a signed proof using the data
     """
-    data: Union[str, bytes, int]
+    data: str
     proof: ZKProof
 
     @staticmethod
@@ -80,7 +80,7 @@ class ZKData(NamedTuple):
         return ZKData(data=data, proof=ZKProof.load(proof))
 
     def dump(self, separator="\n"):
-        return separator.join(map(to_str, [self.data, self.proof.dump()]))
+        return self.data + separator + self.proof.dump()
 
 
 class ZK:
@@ -153,6 +153,7 @@ class ZK:
         return ZKProof(params=self.params, c=c, m=m)
 
     def sign(self, secret: Union[str, bytes], data: Union[int, str, bytes]) -> ZKData:
+        data = to_str(data)
         return ZKData(
             data=data,
             proof=self.create_proof(secret, data),

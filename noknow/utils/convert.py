@@ -2,7 +2,7 @@
 Methods used for conversion
 """
 
-from ecpy.curves import Curve, Point
+from ecpy.curves import Point
 from typing import Union
 
 
