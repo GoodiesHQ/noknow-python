@@ -28,7 +28,7 @@ def to_bytes(data, encoding="utf-8", errors="replace") -> bytes:
         return int_to_bytes(data)
     if isinstance(data, Point):
         c = data.curve
-        return bytes(c.encode_point(data))
+        return bytes(c.encode_point(data, compressed=True))
     print("UNTYPED:", type(data), "\n", data)
     return bytes(data)
 
