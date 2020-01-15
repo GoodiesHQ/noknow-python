@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 from setuptools import setup, find_packages
+from noknow import __version__ as noknow_version
 
 setup(name="noknow",
-      version="0.2.0",
+      version=noknow_version,
       packages=find_packages(),
       install_requires=["ecpy"],
       description="Non-Interactive Zero-Knowledge Proof Implementation in Pure Python",
