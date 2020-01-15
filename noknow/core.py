@@ -145,11 +145,11 @@ class ZK:
         )
 
     def create_proof(self, secret: Union[str, bytes], data: Union[int, str, bytes]=None) -> ZKProof:
-        key = self.hash(secret)                 # Create private signing key
-        r = random.getrandbits(self.bits)       # Generate random bits
-        R = r * self.curve.generator            # Random point whose discrete log, `r`, is know
-        c = self.hash(data, R)                  # Hash the data and random point
-        m = r + c * (key % self.curve.field)    # Send offset between discrete log of R from c*x
+        key = self.hash(secret)                     # Create private signing key
+        r = self.token()                            # Generate random bits
+        R = r * self.curve.generator                # Random point whose discrete log, `r`, is know
+        c = self.hash(data, R)                      # Hash the data and random point
+        m = (r + (c * key)) % self.curve.order      # Send offset between discrete log of R from c*x
         return ZKProof(params=self.params, c=c, m=m)
 
     def sign(self, secret: Union[str, bytes], data: Union[int, str, bytes]) -> ZKData:
@@ -158,6 +158,15 @@ class ZK:
             data=data,
             proof=self.create_proof(secret, data),
         )
+
+    @staticmethod
+    def signature_is_valid(signature: Union[str, ZKSignature]) -> bool:
+        try:
+            sig = signature if isinstance(signature, ZKSignature) else ZKSignature.load(signature)
+            zk = ZK(sig.params)
+            return zk.curve.is_on_curve(zk._to_point(signature))
+        except:
+            return False
 
     def verify(self, challenge: Union[ZKData, ZKProof], signature: ZKSignature, data: Union[str, bytes, int]=""):
         data, proof = (data, challenge) if isinstance(challenge, ZKProof) else (challenge.data, challenge.proof)
